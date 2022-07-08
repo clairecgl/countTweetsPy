@@ -1,0 +1,92 @@
+import requests
+import os
+import json
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+from nltk.probability import FreqDist
+from nltk.sentiment.vader import SentimentIntensityAnalyzer 
+from textblob import Word, TextBlob
+import matplotlib.pyplot as plt
+plt.rcParams['figure.figsize'] = (17, 7)
+plt.rcParams.update({'font.size': 14})
+import pandas as pd
+import seaborn as sns
+import re
+ 
+search_url = "https://api.twitter.com/2/tweets/search/recent"
+ 
+# Optional params: start_time,end_time,since_id,until_id,max_results,next_token,
+# expansions,tweet.fields,media.fields,poll.fields,place.fields,user.fields
+query_params = {'query': '(from:twitterdev -is:retweet) OR #Beyonce','tweet.fields': 'author_id', 'max_results':'100'}
+ 
+
+ 
+def bearer_oauth(r):
+    """
+    Method required by bearer token authentication.
+    """
+ 
+    r.headers["Authorization"] = "Bearer AAAAAAAAAAAAAAAAAAAAAOUmegEAAAAAEfok7Wq8kPpK1lF%2FoxNxpkIN0ZA%3DkSnpVdEvcBz1jJwAyFdNuUGE9sgLO5rcKBMrZEV79WPiwTkLIw"
+    r.headers["User-Agent"] = "v2RecentSearchPython"
+    return r
+ 
+def connect_to_endpoint(url, params):
+    response = requests.get(url, auth=bearer_oauth, params=params)
+    print(response.status_code)
+    if response.status_code != 200:
+        raise Exception(response.status_code, response.text)
+    return response.json()
+ 
+ 
+def main():
+    json_response = connect_to_endpoint(search_url, query_params)
+    print(json.dumps(json_response, indent=4, sort_keys=True))
+    comments = []
+    print(enumerate(json_response))
+    for i, item in enumerate(json_response['data']):
+        print(item)
+        text = item["text"]
+        author_id = item["author_id"]
+        print(text)
+        comments.append (
+            {
+                "author_id": author_id,
+                "text": text
+            }
+        )
+    print(comments)
+    nltk.download('stopwords')
+    nltk.download('punkt')
+    nltk.download('vader_lexicon')
+    stop_words = set(stopwords.words('english'))
+    df = pd.DataFrame(comments)
+    df
+    df.shape
+    df.isnull().sum()
+    def preprocess(response, stop_words):
+        preprocess_response = response
+        preprocess_response = preprocess_response.lower()
+        preprocess_response = re.sub(r'\n|[^a-zA-Z]', ' ', preprocess_response)
+        preprocess_response = preprocess_response.split()
+        preprocess_response = ' '.join(word for word in preprocess_response if word not in stop_words)
+        return preprocess_response
+    # get rid of all punctuations
+    # lower cases
+    df['process_comment_text'] = df['text'].apply(lambda x: preprocess(x, stop_words))
+    # tokenization
+    df['process_comment_text_token'] = df['process_comment_text'].apply(word_tokenize)
+    # stemming
+    ps = PorterStemmer()
+    df['process_comment_text_token'] = df['process_comment_text_token'].apply(
+        lambda x: [ps.stem(y) for y in x])
+    df.head(10)
+    # frequency of words
+    single_word = df['process_comment_text_token'].apply(pd.Series).stack()
+    fdist_most = FreqDist(single_word)
+    fdist_most.plot(50, cumulative=False);
+    fdist_most
+ 
+if __name__ == "__main__":
+    main()
